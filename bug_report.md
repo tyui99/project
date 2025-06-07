@@ -182,15 +182,15 @@
     - **文件：** `e:\py_kshe\project\email_config.py`
     - **改动：**
         *   把 `SMTP_CONFIG['server']` 的值从 `'smtp@qq.com'` 改成 `'smtp.qq.com'`。
-        *   把 `SMTP_CONFIG['sender_email']` 的值从 `'偷影子的人'` 改成实际的邮箱地址 `'1814968491@qq.com'`。
+        *   把 `SMTP_CONFIG['sender_email']` 的值从 `'偷影子的人'` 改成实际的邮箱地址 `'your_email@example.com'`。
     - **调整后相关配置：**
       ```python
       SMTP_CONFIG = {
           'server': 'smtp.qq.com',  # 例如: 'smtp.qq.com'
           'port': 587,
-          'username': '1814968491@qq.com',
-          'password': 'hwhqdyffxepxfffj', # 实际应为授权码
-          'sender_email': '1814968491@qq.com', 
+          'username': 'your_email@example.com',
+          'password': 'YOUR_EMAIL_PASSWORD_OR_APP_SPECIFIC_PASSWORD', # 实际应为授权码
+          'sender_email': 'your_email@example.com', 
           'sender_name': '会议提醒助手',
           'use_tls': True
       }

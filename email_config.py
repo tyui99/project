@@ -11,9 +11,9 @@
 SMTP_CONFIG = {
     'server': 'smtp.qq.com',  # 例如: 'smtp.qq.com'
     'port': 587,   # TLS端口587，SSL端口465
-    'username': '1814968491@qq.com',  # 您的邮箱地址
-    'password': 'hwhqdyffxepxfffj',  # 您的邮箱密码或授权码
-    'sender_email': '1814968491@qq.com',  # 发件人邮箱（通常与username相同）
+    'username': 'your_email@example.com',  # 您的邮箱地址
+    'password': 'YOUR_EMAIL_PASSWORD_OR_APP_SPECIFIC_PASSWORD',  # 您的邮箱密码或授权码
+    'sender_email': 'your_email@example.com',  # 发件人邮箱（通常与username相同）
     'sender_name': '会议提醒助手',  # 发件人显示名称
     'use_tls': True  # True使用TLS，False使用SSL
 }
