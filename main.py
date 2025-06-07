@@ -1,19 +1,31 @@
 # main.py
 import tkinter as tk
-from gui import ConferenceReminderApp
-from data import load_conference_data, load_user_preferences, load_sent_reminders
+from gui import ConferenceReminderApp # 修正导入的类名
+from data import load_conference_data, load_user_preferences, save_user_preferences
+from logic import update_conference_data, get_reminders_for_user, mark_reminder_sent, parse_and_store_deadlines
+from pachong import fetch_conferences
+from tongzhi import send_email, format_reminder_email
+from scheduler import main_scheduler # 导入调度器主函数
+import threading # 导入threading模块
 
-if __name__ == '__main__':
-    # 在启动GUI之前，确保所有必要的数据都已从文件加载到内存中
-    # data.py 在其模块级别加载这些数据，但为了明确，可以在此调用
-    # 不过，由于 data.py 在导入时就会执行加载，这里的显式调用主要是为了可读性
-    # 或在需要重新加载的场景下使用。
-    # load_conference_data() # data.py 导入时已执行
-    # load_user_preferences() # data.py 导入时已执行
-    # load_sent_reminders() # data.py 导入时已执行
+if __name__ == "__main__":
+    # 加载初始数据
+    load_user_preferences()
 
-    print("正在启动论文投稿提醒系统 GUI...")
+    # 启动GUI
     root = tk.Tk()
-    app = ConferenceReminderApp(root)
+    app = ConferenceReminderApp(root) # 使用正确的类名实例化应用
+    
+    # GUI初始化完成后，立即更新会议数据
+    from scheduler import job_fetch_and_update_conferences
+    job_fetch_and_update_conferences()
+    
+    # 数据更新完成后，刷新GUI显示
+    app.refresh_list()
+    
+    # 在后台线程中启动调度器
+    scheduler_thread = threading.Thread(target=main_scheduler, daemon=True)
+    scheduler_thread.start()
+
     root.mainloop()
     print("GUI已关闭。")

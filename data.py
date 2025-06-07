@@ -24,6 +24,8 @@ def _datetime_converter(o):
         return o.isoformat()
     if isinstance(o, datetime.date):
         return o.isoformat()
+    # 对于其他类型的对象，抛出TypeError让json.dump使用默认处理
+    raise TypeError(f"Object of type {type(o)} is not JSON serializable")
 
 def _datetime_parser(dct):
     for k, v in dct.items():
@@ -73,12 +75,20 @@ def save_conference_data(data_to_save=None):
     """将全局会议数据列表保存到JSON文件。"""
     global conference_data_list
     data = data_to_save if data_to_save is not None else conference_data_list
+    print(f"准备保存 {len(data)} 条会议数据到 {CONFERENCE_DATA_FILE}")
     try:
         with open(CONFERENCE_DATA_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4, default=_datetime_converter)
         print(f"会议数据已保存到 {CONFERENCE_DATA_FILE}。")
+        # 验证保存是否成功
+        import os
+        file_size = os.path.getsize(CONFERENCE_DATA_FILE)
+        print(f"保存的文件大小: {file_size} 字节")
     except Exception as e:
         print(f"保存会议数据失败: {e}")
+        print(f"错误类型: {type(e)}")
+        import traceback
+        traceback.print_exc()
 
 # --- 用户偏好 --- 
 def load_user_preferences():

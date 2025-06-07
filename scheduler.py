@@ -11,18 +11,25 @@ from data import load_conference_data, save_conference_data, load_user_preferenc
 last_successful_fetch_time = None
 FETCH_INTERVAL_HOURS = 24 # 每24小时爬取一次
 
-def job_fetch_and_update_conferences():
+def job_fetch_and_update_conferences(start_date=None, end_date=None):
     """
-    定时任务：爬取最新的会议信息并更新。
+    定时任务或手动触发：爬取最新的会议信息并更新。
+    如果提供了 start_date 和 end_date，则爬取指定日期范围的数据。
     """
     global last_successful_fetch_time
     print(f"[{datetime.datetime.now()}] 开始执行会议信息爬取和更新任务...")
+    if start_date and end_date:
+        print(f"  指定日期范围: {start_date} 到 {end_date}")
+    else:
+        print("  未指定日期范围，将尝试爬取默认范围的数据。")
+
     try:
-        categories_to_fetch = ["人工智能"] # 可以扩展到其他类别
+        categories_to_fetch = ["computer science", "artificial intelligence"]
         all_new_conferences = []
         for category in categories_to_fetch:
             print(f"  正在爬取类别: {category}")
-            new_conf_data = fetch_conferences(category)
+            # 将日期范围参数传递给 fetch_conferences
+            new_conf_data = fetch_conferences(category, start_date=start_date, end_date=end_date)
             if new_conf_data:
                 all_new_conferences.extend(new_conf_data)
             else:
@@ -37,8 +44,8 @@ def job_fetch_and_update_conferences():
             updated_conferences = parse_and_store_deadlines(all_new_conferences) # from logic.py
             
             update_conference_data(updated_conferences) # from logic.py, updates data.conference_data_list
-            save_conference_data(conference_data_list) # from data.py, placeholder for saving
-            print(f"会议数据已成功更新并保存。共有 {len(conference_data_list)} 条有效会议记录。")
+            save_conference_data(updated_conferences) # 直接保存处理后的数据
+            print(f"会议数据已成功更新并保存。共有 {len(updated_conferences)} 条有效会议记录。")
             last_successful_fetch_time = datetime.datetime.now()
         else:
             print("未能从任何类别爬取到新的会议数据。")
@@ -58,25 +65,54 @@ def job_send_reminders():
         print("  用户偏好为空，没有用户需要提醒。")
         return
 
+    from tongzhi import send_submission_reminder, send_notification_reminder, send_camera_ready_reminder
+    from email_config import is_email_configured, get_config_status
+    
+    if not is_email_configured():
+        print(f"  邮件配置未完成，跳过提醒发送。状态: {get_config_status()}")
+        return
+
     reminders_sent_count = 0
-    for email in list(user_preferences.keys()): # Use list to avoid issues if dict changes during iteration (though not expected here)
-        user_reminders = get_reminders_for_user(email) # logic.py 函数
+    for email in list(user_preferences.keys()):
+        user_reminders = get_reminders_for_user(email)
         if user_reminders:
             print(f"  为用户 {email} 找到 {len(user_reminders)} 条提醒。")
             for reminder in user_reminders:
-                subject, message_html = format_reminder_email(reminder) # tongzhi.py 函数
-                if send_email(email, subject, message_html): # tongzhi.py 函数
-                    # Corrected call to mark_reminder_sent
+                # 找到对应的会议信息
+                conference_info = next(
+                    (conf for conf in conference_data_list if conf.get('acronym') == reminder['conference_acronym']),
+                    None
+                )
+                
+                if not conference_info:
+                    print(f"    未找到会议 {reminder['conference_acronym']} 的详细信息，跳过提醒。")
+                    continue
+                
+                # 计算距离截止日期的天数
+                deadline_date = datetime.datetime.fromisoformat(reminder['deadline_date'].replace('Z', '+00:00'))
+                days_left = (deadline_date.date() - datetime.datetime.now().date()).days
+                
+                # 根据提醒类型发送相应邮件
+                success = False
+                if reminder['deadline_type'] == 'submission_deadline':
+                    success = send_submission_reminder(email, conference_info, days_left)
+                elif reminder['deadline_type'] == 'notification_date':
+                    success = send_notification_reminder(email, conference_info, days_left)
+                elif reminder['deadline_type'] == 'camera_ready':
+                    success = send_camera_ready_reminder(email, conference_info, days_left)
+                else:
+                    print(f"    未知的提醒类型: {reminder['deadline_type']}")
+                    continue
+                
+                if success:
                     mark_reminder_sent(email, reminder['conference_acronym'], reminder['deadline_type'], reminder['deadline_date'])
                     reminders_sent_count += 1
+                    print(f"    ✅ 成功发送给 {email} 关于 {reminder['conference_acronym']} 的 {reminder['deadline_type']} 提醒")
                 else:
-                    print(f"    发送给 {email} 关于 {reminder['conference_acronym']} 的提醒失败。")
+                    print(f"    ❌ 发送给 {email} 关于 {reminder['conference_acronym']} 的提醒失败")
     
     if reminders_sent_count > 0:
         print(f"邮件提醒检查任务完成，共发送 {reminders_sent_count} 封提醒邮件。")
-        # sent_reminders is a global in data.py; if it needs persistence, 
-        # data.py should have save/load for it, and it should be called here.
-        # save_user_preferences(user_preferences) # Only save if user_preferences itself changed.
     else:
         print("邮件提醒检查任务完成，没有需要发送的提醒。")
 
@@ -85,20 +121,28 @@ def main_scheduler():
     load_conference_data()
     load_user_preferences()
 
-    run_initial_fetch = True
-    if last_successful_fetch_time:
-        if datetime.datetime.now() - last_successful_fetch_time < datetime.timedelta(hours=FETCH_INTERVAL_HOURS):
-            run_initial_fetch = False
-            print("最近已成功爬取过数据，跳过首次立即执行。")
+    # run_initial_fetch = True
+    # if last_successful_fetch_time:
+    #     if datetime.datetime.now() - last_successful_fetch_time < datetime.timedelta(hours=FETCH_INTERVAL_HOURS):
+    #         run_initial_fetch = False
+    #         print("最近已成功爬取过数据，跳过首次立即执行。")
     
-    if not conference_data_list or run_initial_fetch:
-        print("首次运行或数据陈旧，立即执行一次会议信息爬取...")
-        job_fetch_and_update_conferences()
-    else:
-        print(f"现有 {len(conference_data_list)} 条会议数据。")
+    # if not conference_data_list or run_initial_fetch:
+    #     print("首次运行或数据陈旧，立即执行一次会议信息爬取...")
+    #     # 初始调用时，不传递日期范围，让爬虫使用其默认行为或处理None值
+    #     job_fetch_and_update_conferences()
+    # else:
+    #     print(f"现有 {len(conference_data_list)} 条会议数据。")
 
-    schedule.every(FETCH_INTERVAL_HOURS).hours.do(job_fetch_and_update_conferences)
-    print(f"已设置定时任务：每 {FETCH_INTERVAL_HOURS} 小时爬取和更新会议信息。")
+    print("调度器初始化完成，等待手动触发或定时任务执行爬取。")
+    if conference_data_list:
+        print(f"现有 {len(conference_data_list)} 条会议数据。")
+    else:
+        print("当前无会议数据，请手动刷新。")
+
+    # 移除自动爬取的定时任务，只保留邮件提醒
+    # schedule.every(FETCH_INTERVAL_HOURS).hours.do(job_fetch_and_update_conferences)
+    # print(f"已设置定时任务：每 {FETCH_INTERVAL_HOURS} 小时爬取和更新会议信息。")
 
     schedule.every().day.at("08:00").do(job_send_reminders)
     schedule.every().day.at("14:00").do(job_send_reminders)

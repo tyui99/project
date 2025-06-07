@@ -1,7 +1,13 @@
 {
     "1814968491@qq.com": {
         "user_email": "1814968491@qq.com",
-        "subscribed_conferences": [],
+        "subscribed_conferences": [
+            "WODES",
+            "FSE",
+            "ASE",
+            "FCT",
+            "CSF"
+        ],
         "reminder_days_before": {
             "submission_deadline": 7,
             "abstract_deadline": 7,

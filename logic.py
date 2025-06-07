@@ -36,7 +36,9 @@ def parse_and_store_deadlines(conference_list_from_pachong):
                     else:
                         print(f"警告: 无法转换会议 {conf.get('acronym', 'N/A')} 的截止日期 {deadline_type}: {date_str} (TZ: {tz_str})")
                 else:
-                    print(f"警告: 会议 {conf.get('acronym', 'N/A')} 的截止日期 {deadline_type} 缺少日期字符串.")
+                    # 不显示缺少日期字符串的警告，因为很多会议确实没有摘要截止日期
+                    # print(f"警告: 会议 {conf.get('acronym', 'N/A')} 的截止日期 {deadline_type} 缺少日期字符串.")
+                    pass
         
         conf['parsed_deadlines'] = parsed_deadlines_for_conf
         updated_list.append(conf)

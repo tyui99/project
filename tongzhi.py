@@ -2,15 +2,8 @@
 import smtplib
 from email.mime.text import MIMEText
 from email.header import Header
-
-# SMTP 服务器配置 (用户需要根据自己的邮箱服务商修改这些设置)
-# 警告：请勿将密码硬编码到代码中。实际应用中应使用更安全的方式管理凭据，
-# 例如环境变量、配置文件或GUI输入。
-SMTP_SERVER = 'smtp.example.com'  # 例如：'smtp.qq.com', 'smtp.gmail.com'
-SMTP_PORT = 587  # TLS常用端口，或者 465 (SSL)
-SMTP_USERNAME = 'your_email@example.com' # 您的发件邮箱
-SMTP_PASSWORD = 'your_email_password'    # 您的邮箱密码或授权码
-SENDER_EMAIL = 'your_email@example.com'  # 发件人邮箱地址
+from datetime import datetime, timedelta
+from email_config import SMTP_CONFIG, EMAIL_TEMPLATES, is_email_configured
 
 def send_email(receiver_email, subject, message_html):
     """
@@ -20,29 +13,31 @@ def send_email(receiver_email, subject, message_html):
     :param message_html: HTML格式的邮件内容
     :return: True 如果发送成功, False 如果失败
     """
-    if not all([SMTP_SERVER, SMTP_USERNAME, SMTP_PASSWORD, SENDER_EMAIL]) or SMTP_SERVER == 'smtp.example.com':
-        print("错误: SMTP配置不完整或使用的是示例配置。请在 tongzhi.py 中正确配置SMTP服务器信息。")
+    if not is_email_configured():
+        print("错误: SMTP配置不完整。请在 email_config.py 中正确配置SMTP服务器信息。")
         return False
 
+    config = SMTP_CONFIG
     msg = MIMEText(message_html, 'html', 'utf-8')
-    msg['From'] = Header(f"会议提醒助手 <{SENDER_EMAIL}>", 'utf-8')
-    msg['To'] = Header(receiver_email, 'utf-8')
+    msg['From'] = config['sender_email']
+    msg['To'] = receiver_email
     msg['Subject'] = Header(subject, 'utf-8')
 
     try:
-        print(f"尝试连接到SMTP服务器: {SMTP_SERVER}:{SMTP_PORT}")
-        if SMTP_PORT == 465:
-            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=10)
-        else:
-            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
+        print(f"尝试连接到SMTP服务器: {config['server']}:{config['port']}")
+        
+        if config['use_tls']:
+            server = smtplib.SMTP(config['server'], config['port'], timeout=10)
             server.ehlo()
             server.starttls()
             server.ehlo()
+        else:
+            server = smtplib.SMTP_SSL(config['server'], config['port'], timeout=10)
         
         print("尝试登录SMTP服务器...")
-        server.login(SMTP_USERNAME, SMTP_PASSWORD)
+        server.login(config['username'], config['password'])
         print("SMTP登录成功。正在发送邮件...")
-        server.sendmail(SENDER_EMAIL, [receiver_email], msg.as_string())
+        server.sendmail(config['sender_email'], [receiver_email], msg.as_string())
         server.quit()
         print(f"邮件已成功发送给 {receiver_email}，主题: {subject}")
         return True
@@ -57,6 +52,65 @@ def send_email(receiver_email, subject, message_html):
     except Exception as e:
         print(f"发送邮件给 {receiver_email} 失败: {e}")
     return False
+
+def send_conference_reminder(receiver_email, conference_info, reminder_type, days_left):
+    """
+    发送会议提醒邮件
+    :param receiver_email: 收件人邮箱
+    :param conference_info: 会议信息字典
+    :param reminder_type: 提醒类型 ('submission_reminder', 'notification_reminder', 'camera_ready_reminder')
+    :param days_left: 距离截止日期的天数
+    :return: True 如果发送成功, False 如果失败
+    """
+    if not is_email_configured():
+        print("错误: 邮件配置未完成，无法发送提醒邮件。")
+        return False
+    
+    if reminder_type not in EMAIL_TEMPLATES:
+        print(f"错误: 未知的提醒类型: {reminder_type}")
+        return False
+    
+    template = EMAIL_TEMPLATES[reminder_type]
+    
+    # 准备邮件内容变量
+    conference_name = f"{conference_info.get('acronym', 'N/A')} - {conference_info.get('full_name', 'Unknown Conference')}"
+    location = conference_info.get('location', '未知地点')
+    conference_date = conference_info.get('when', '未知时间')
+    
+    # 获取相关日期
+    deadlines = conference_info.get('extracted_deadlines', {})
+    submission_deadline = deadlines.get('submission_deadline', {}).get('date_str', '未知')
+    notification_date = deadlines.get('notification_date', {}).get('date_str', '未知')
+    camera_ready_deadline = deadlines.get('camera_ready', {}).get('date_str', '未知')
+    
+    # 格式化邮件内容
+    subject = template['subject'].format(
+        conference_name=conference_name
+    )
+    
+    message_html = template['template'].format(
+        conference_name=conference_name,
+        submission_deadline=submission_deadline,
+        notification_date=notification_date,
+        camera_ready_deadline=camera_ready_deadline,
+        conference_date=conference_date,
+        location=location,
+        days_left=days_left
+    )
+    
+    return send_email(receiver_email, subject, message_html)
+
+def send_submission_reminder(receiver_email, conference_info, days_left):
+    """发送投稿截止提醒"""
+    return send_conference_reminder(receiver_email, conference_info, 'submission_reminder', days_left)
+
+def send_notification_reminder(receiver_email, conference_info, days_left):
+    """发送通知时间提醒"""
+    return send_conference_reminder(receiver_email, conference_info, 'notification_reminder', days_left)
+
+def send_camera_ready_reminder(receiver_email, conference_info, days_left):
+    """发送终稿提交提醒"""
+    return send_conference_reminder(receiver_email, conference_info, 'camera_ready_reminder', days_left)
 
 def format_reminder_email(reminder_details):
     """
